@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+data/raw/
+data/faces/
+data/folds.csv
+weights/
+outputs/
