@@ -99,6 +99,7 @@ def prepare_manifests(
     test_faces: str | Path,
     output_dir: str | Path,
     frequency_dir: str | Path,
+    sample_submission: str | Path | None = None,
 ) -> tuple[Path, Path]:
     """Validate prepared crops and produce absolute-path manifests and FFT maps."""
     train_root = Path(train_faces).expanduser().resolve(strict=True)
@@ -123,6 +124,22 @@ def prepare_manifests(
 
     train_manifest = _load_face_rows(train_root, is_test=False)
     test_manifest = _load_face_rows(test_root, is_test=True)
+    submission_order: list[str] | None = None
+    if sample_submission is not None:
+        submission_path = Path(sample_submission).expanduser().resolve(strict=True)
+        sample = pd.read_csv(submission_path, dtype={"image_id": "string"})
+        if "image_id" not in sample:
+            raise ValueError(f"{submission_path} must contain an 'image_id' column.")
+        if (
+            sample["image_id"].isna().any()
+            or sample["image_id"].str.strip().eq("").any()
+            or sample["image_id"].duplicated().any()
+        ):
+            raise ValueError(
+                f"{submission_path} contains empty or duplicate image IDs."
+            )
+        submission_order = sample["image_id"].str.strip().tolist()
+
     output_root.mkdir(parents=True, exist_ok=True)
     frequency_root.mkdir(parents=True, exist_ok=True)
 
@@ -163,11 +180,14 @@ def prepare_manifests(
         freq_path = _save_frequency_image(
             rgb_path, f"test/{relative_path}", frequency_root
         )
-        filename = row.get("filename")
-        if pd.isna(filename) or not str(filename).strip():
-            filename = row.get("original_path")
-        if pd.isna(filename) or not str(filename).strip():
-            filename = relative_path
+        if submission_order is not None:
+            filename = Path(relative_path).stem
+        else:
+            filename = row.get("filename")
+            if pd.isna(filename) or not str(filename).strip():
+                filename = row.get("original_path")
+            if pd.isna(filename) or not str(filename).strip():
+                filename = relative_path
         test_records.append(
             {
                 "rgb_path": str(rgb_path),
@@ -183,6 +203,18 @@ def prepare_manifests(
             "Test filenames must be unique for inference; duplicates include "
             + ", ".join(str(value) for value in duplicates[:5])
         )
+    if submission_order is not None:
+        records_by_id = {record["filename"]: record for record in test_records}
+        manifest_ids = set(records_by_id)
+        template_ids = set(submission_order)
+        if manifest_ids != template_ids:
+            missing = sorted(template_ids - manifest_ids)
+            extra = sorted(manifest_ids - template_ids)
+            raise ValueError(
+                "Test crops do not match sample_submission.csv: "
+                f"{len(missing)} missing, {len(extra)} extra."
+            )
+        test_records = [records_by_id[image_id] for image_id in submission_order]
 
     train_output = output_root / "manifest_folds.csv"
     test_output = output_root / "test_manifest.csv"
@@ -206,6 +238,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--test-faces", type=Path, required=True)
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--frequency-dir", type=Path, required=True)
+    parser.add_argument(
+        "--sample-submission",
+        type=Path,
+        help="Optional template used to validate and order test image IDs.",
+    )
     return parser.parse_args()
 
 
@@ -216,6 +253,7 @@ def main() -> None:
         args.test_faces,
         args.out_dir,
         args.frequency_dir,
+        args.sample_submission,
     )
 
 

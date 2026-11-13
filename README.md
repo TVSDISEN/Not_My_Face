@@ -18,6 +18,48 @@ python -m pip install -r requirements.txt
 Put only the provided dataset under `data/raw/`. Do not add external training
 data. Supported image formats are JPG, JPEG, PNG, BMP, and WebP.
 
+## Run the supplied hackathon dataset
+
+The provided `hackathon_dataset.zip` is intentionally Git-ignored. Extract it
+locally without adding or committing it:
+
+```powershell
+Expand-Archive -LiteralPath .\hackathon_dataset.zip -DestinationPath .\data\raw
+```
+
+The archive layout is `hackathon_dataset/train/{real,fake}/<image_id>.jpg`,
+`hackathon_dataset/test/images/<image_id>.jpg`, plus
+`train_metadata.csv` and `sample_submission.csv`. Validate that each metadata
+row maps to exactly one training image and create the normalized manifest:
+
+```powershell
+python -m src.data.prepare_hackathon_data --data-root data/raw/hackathon_dataset --out-dir data/manifests
+```
+
+The provided CSV contains image IDs and labels but no video/subject IDs, so
+each unique image ID is used as its own group. This keeps frames together only
+if the data provides shared IDs; it cannot detect different frames from the
+same person when IDs are unrelated. Use subject/video metadata if the hackathon
+provides it separately.
+
+Generate and extract the training and test crops, then create model-ready
+manifests and cached frequency maps:
+
+```powershell
+python -m src.data.make_folds --data data/raw/hackathon_dataset/train --metadata data/manifests/train_metadata.csv --out data/train_folds.csv --folds 5 --seed 42
+python -m src.data.extract_faces --data data/raw/hackathon_dataset/train --out data/faces/train --metadata data/train_folds.csv --margin 0.15 --no-face full-image
+python -m src.data.extract_faces --data data/raw/hackathon_dataset/test/images --out data/faces/test --unlabeled --margin 0.15 --no-face full-image
+python -m src.data.prepare_manifests --train-faces data/faces/train --test-faces data/faces/test --out-dir data/manifests --frequency-dir data/frequency --sample-submission data/raw/hackathon_dataset/sample_submission.csv
+```
+
+Check the `failures.csv` and `fallbacks.csv` reports after extraction. With
+`--no-face full-image`, images where MTCNN does not find a confident face are
+retained as full frames and listed in `fallbacks.csv`; without this option they
+are skipped and listed in `failures.csv`. The test-manifest command also
+verifies that all extracted test IDs match the sample submission and orders
+rows to match that template. All dataset files and generated manifests, crops,
+and FFT maps are Git-ignored.
+
 ## Prepare training and test data
 
 ### 1. Build grouped training folds

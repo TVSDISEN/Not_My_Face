@@ -18,6 +18,7 @@ from src.data.frequency import compute_fft_spectrogram, frequency_map_to_rgb
 from src.data.make_folds import assign_folds, main as make_folds_main
 from src.data.manifest import build_manifest, normalize_label
 from src.data.prepare_manifests import prepare_manifests
+from src.data.prepare_hackathon_data import prepare_hackathon_data
 
 
 class ManifestTests(unittest.TestCase):
@@ -127,6 +128,14 @@ class FaceGeometryTests(unittest.TestCase):
         )
         self.assertIsNone(select_face_box(boxes, confidence, min_confidence=1.0))
 
+    def test_mtcnn_object_arrays_are_supported(self):
+        boxes = np.array([[1.0, 2.0, 11.0, 12.0]], dtype=object)
+        probabilities = np.array([0.99], dtype=object)
+        self.assertEqual(
+            select_face_box(boxes, probabilities, min_confidence=0.9),
+            (1.0, 2.0, 11.0, 12.0),
+        )
+
     def test_margin_is_expanded_and_clamped(self):
         self.assertEqual(
             expand_box((5, 5, 15, 15), (20, 20, 3), margin=0.2),
@@ -217,6 +226,43 @@ class FaceGeometryTests(unittest.TestCase):
         self.assertNotIn("label", manifest.columns)
         self.assertEqual(manifest.loc[0, "group_id"], "batch_1")
 
+    def test_full_image_fallback_is_recorded_and_retained(self):
+        class NoFaceDetector:
+            def detect(self, image):
+                return None, None
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            data_dir = root / "test_raw"
+            source = data_dir / "image.jpg"
+            data_dir.mkdir()
+            self.assertTrue(cv2.imwrite(str(source), np.full((32, 32, 3), 127, np.uint8)))
+            output_dir = root / "test_faces"
+            with patch(
+                "sys.argv",
+                [
+                    "extract_faces",
+                    "--data",
+                    str(data_dir),
+                    "--out",
+                    str(output_dir),
+                    "--unlabeled",
+                    "--no-face",
+                    "full-image",
+                ],
+            ), patch.object(
+                extract_faces, "create_mtcnn", return_value=NoFaceDetector()
+            ), redirect_stdout(StringIO()):
+                extract_faces.main()
+
+            manifest = pd.read_csv(output_dir / "manifest.csv")
+            fallbacks = pd.read_csv(output_dir / "fallbacks.csv")
+            failures = pd.read_csv(output_dir / "failures.csv")
+
+        self.assertEqual(len(manifest), 1)
+        self.assertEqual(len(fallbacks), 1)
+        self.assertTrue(failures.empty)
+
 
 class ModelManifestIntegrationTests(unittest.TestCase):
     def test_model_manifests_and_frequency_cache_are_ready_to_load(self):
@@ -249,7 +295,7 @@ class ModelManifestIntegrationTests(unittest.TestCase):
             pd.DataFrame(train_rows).to_csv(train_root / "manifest.csv", index=False)
 
             test_rows = []
-            for name in ("clip_a/frame.jpg", "clip_b/frame.jpg"):
+            for name in ("clip_a.jpg", "clip_b.jpg"):
                 image_path = test_root / name
                 image_path.parent.mkdir(parents=True, exist_ok=True)
                 self.assertTrue(
@@ -259,7 +305,7 @@ class ModelManifestIntegrationTests(unittest.TestCase):
                     {
                         "path": name,
                         "label": 0,
-                        "group_id": Path(name).parent.as_posix(),
+                        "group_id": Path(name).stem,
                         "filename": name,
                         "original_path": name,
                     }
@@ -268,8 +314,19 @@ class ModelManifestIntegrationTests(unittest.TestCase):
 
             manifest_dir = root / "manifests"
             frequency_dir = root / "frequency"
+            sample_submission = root / "sample_submission.csv"
+            pd.DataFrame(
+                [
+                    {"image_id": "clip_b", "label": 0, "confidence": 0.5},
+                    {"image_id": "clip_a", "label": 0, "confidence": 0.5},
+                ]
+            ).to_csv(sample_submission, index=False)
             train_output, test_output = prepare_manifests(
-                train_root, test_root, manifest_dir, frequency_dir
+                train_root,
+                test_root,
+                manifest_dir,
+                frequency_dir,
+                sample_submission=sample_submission,
             )
             train_manifest = pd.read_csv(train_output)
             test_manifest = pd.read_csv(test_output)
@@ -299,7 +356,7 @@ class ModelManifestIntegrationTests(unittest.TestCase):
                 all(Path(path).is_file() for path in test_manifest["freq_path"])
             )
             self.assertEqual(
-                set(test_manifest["filename"]), {"clip_a/frame.jpg", "clip_b/frame.jpg"}
+                test_manifest["filename"].tolist(), ["clip_b", "clip_a"]
             )
             frequency = cv2.imread(test_manifest.loc[0, "freq_path"])
             self.assertEqual(frequency.shape, (16, 20, 3))
@@ -368,6 +425,47 @@ class ModelManifestIntegrationTests(unittest.TestCase):
             [f"video/frame_{index}.jpg" for index in range(3)],
         )
         self.assertTrue(np.allclose(submission["label"], 0.5))
+
+
+class HackathonDatasetMappingTests(unittest.TestCase):
+    def test_metadata_generates_paths_and_image_groups_and_validates_test_ids(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            dataset = root / "hackathon_dataset"
+            train_root = dataset / "train"
+            records = []
+            for label, class_name in ((0, "real"), (1, "fake")):
+                for index in range(5):
+                    image_id = f"{class_name}-{index}"
+                    image_path = train_root / class_name / f"{image_id}.jpg"
+                    image_path.parent.mkdir(parents=True, exist_ok=True)
+                    image_path.write_bytes(b"synthetic test image")
+                    records.append({"image_id": image_id, "label": label})
+            pd.DataFrame(records).to_csv(dataset / "train_metadata.csv", index=False)
+
+            test_root = dataset / "test" / "images"
+            test_root.mkdir(parents=True)
+            test_ids = ["test-2", "test-1"]
+            for image_id in test_ids:
+                (test_root / f"{image_id}.jpg").write_bytes(b"synthetic test image")
+            pd.DataFrame(
+                [
+                    {"image_id": image_id, "label": 0, "confidence": 0.5}
+                    for image_id in test_ids
+                ]
+            ).to_csv(dataset / "sample_submission.csv", index=False)
+
+            output = prepare_hackathon_data(dataset, root / "manifests")
+            prepared = pd.read_csv(output)
+
+        self.assertEqual(list(prepared.columns), ["path", "label", "group_id"])
+        self.assertEqual(len(prepared), 10)
+        self.assertEqual(set(prepared["label"]), {0, 1})
+        self.assertTrue(
+            all(pathlib_path.is_relative_to(Path("real")) or pathlib_path.is_relative_to(Path("fake"))
+                for pathlib_path in map(Path, prepared["path"]))
+        )
+        self.assertEqual(prepared["group_id"].nunique(), 10)
 
 
 class FrequencyTests(unittest.TestCase):

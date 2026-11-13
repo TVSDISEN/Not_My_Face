@@ -9,6 +9,7 @@ __pycache__/
 .ipynb_checkpoints/
 
 # The provided dataset and generated preprocessing artifacts must not be committed.
+*.zip
 data/raw/
 data/faces/
 data/frequency/

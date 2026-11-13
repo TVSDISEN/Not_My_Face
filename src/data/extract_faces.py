@@ -22,15 +22,22 @@ def select_face_box(
     """Choose the largest detected face meeting the confidence threshold."""
     if boxes is None or probabilities is None:
         return None
-    valid = [
-        (box, float(probability))
-        for box, probability in zip(boxes, probabilities)
-        if probability is not None
-        and float(probability) >= min_confidence
-        and np.all(np.isfinite(box))
-        and box[2] > box[0]
-        and box[3] > box[1]
-    ]
+    valid = []
+    for box, probability in zip(boxes, probabilities):
+        try:
+            numeric_box = np.asarray(box, dtype=np.float64)
+            confidence = float(probability)
+        except (TypeError, ValueError):
+            continue
+        if (
+            numeric_box.shape == (4,)
+            and np.isfinite(confidence)
+            and confidence >= min_confidence
+            and np.all(np.isfinite(numeric_box))
+            and numeric_box[2] > numeric_box[0]
+            and numeric_box[3] > numeric_box[1]
+        ):
+            valid.append((numeric_box, confidence))
     if not valid:
         return None
     box, _ = max(
@@ -144,6 +151,7 @@ def main() -> None:
 
     extracted: list[dict[str, Any]] = []
     failures: list[dict[str, str]] = []
+    fallbacks: list[dict[str, str]] = []
     written_paths: set[str] = set()
     for row in tqdm(manifest.to_dict("records"), desc="Extracting faces", unit="image"):
         source_relative = str(row["path"])
@@ -163,6 +171,9 @@ def main() -> None:
                     {"path": source_relative, "reason": "no confident face detected"}
                 )
                 continue
+            fallbacks.append(
+                {"path": source_relative, "reason": "no confident face; used full image"}
+            )
             crop = image
         else:
             left, top, right, bottom = expand_box(face_box, image.shape, args.margin)
@@ -208,10 +219,14 @@ def main() -> None:
     pd.DataFrame(failures, columns=["path", "reason"]).to_csv(
         output_root / "failures.csv", index=False
     )
+    pd.DataFrame(fallbacks, columns=["path", "reason"]).to_csv(
+        output_root / "fallbacks.csv", index=False
+    )
 
     print(
         f"Saved {len(extracted)} face crops to {output_root}; "
-        f"{len(failures)} image(s) were skipped or failed."
+        f"{len(failures)} image(s) were skipped or failed, "
+        f"{len(fallbacks)} used full-frame fallback."
     )
     if not extracted:
         raise RuntimeError(
