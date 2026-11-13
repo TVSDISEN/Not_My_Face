@@ -51,10 +51,10 @@ class DualStreamNet(nn.Module):
         # 3. Fusion & Classifier Head
         combined_dim = spatial_out_dim + 256
         self.classifier = nn.Sequential(
-            nn.Dropout(p=dropout_rate, inplace=True),
+            nn.Dropout(p=dropout_rate),
             nn.Linear(combined_dim, 512),
-            nn.ReLU(inplace=True),
-            nn.Dropout(p=dropout_rate / 2, inplace=True),
+            nn.ReLU(inplace=False),
+            nn.Dropout(p=dropout_rate / 2),
             nn.Linear(512, num_classes)
         )
 
