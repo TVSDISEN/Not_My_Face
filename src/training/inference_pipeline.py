@@ -2,7 +2,7 @@
 import os
 import torch
 import pandas as pd
-from torch.cuda.amp import autocast
+from torch.amp import autocast
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -13,11 +13,24 @@ def run_ensemble_inference(test_manifest_csv="test_manifest.csv", checkpoint_dir
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"🔍 Running Ensemble Inference on device: {device}")
 
-    checkpoint_paths = [os.path.join(checkpoint_dir, f) for f in os.listdir(checkpoint_dir) if f.endswith(".pth")]
+    if not os.path.isdir(checkpoint_dir):
+        raise FileNotFoundError(f"Checkpoint directory not found: {checkpoint_dir}")
+    checkpoint_paths = sorted(
+        os.path.join(checkpoint_dir, filename)
+        for filename in os.listdir(checkpoint_dir)
+        if filename.endswith(".pt")
+    )
+    if not checkpoint_paths:
+        checkpoint_paths = sorted(
+            os.path.join(checkpoint_dir, filename)
+            for filename in os.listdir(checkpoint_dir)
+            if filename.endswith(".pth")
+        )
     
     if not checkpoint_paths:
-        print("⚠️ No checkpoints found! Please run training first.")
-        return
+        raise FileNotFoundError(
+            f"No .pt or .pth checkpoints found in {checkpoint_dir}; run training first."
+        )
 
     models = []
     for path in checkpoint_paths:
@@ -32,7 +45,13 @@ def run_ensemble_inference(test_manifest_csv="test_manifest.csv", checkpoint_dir
     
     test_df = pd.read_csv(test_manifest_csv)
     test_dataset = HackathonDataset(test_df)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=True)
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=2,
+        pin_memory=device.type == "cuda",
+    )
     
     results = []
     filenames = test_df["filename"].tolist()
@@ -44,7 +63,7 @@ def run_ensemble_inference(test_manifest_csv="test_manifest.csv", checkpoint_dir
             
             batch_preds = torch.zeros(rgb.size(0), device=device)
             for model in models:
-                with autocast():
+                with autocast(device_type=device.type, enabled=device.type == "cuda"):
                     outputs = model(rgb, freq)
                     probs = torch.sigmoid(outputs).flatten()
                     batch_preds += probs

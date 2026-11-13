@@ -3,7 +3,8 @@ import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.cuda.amp import GradScaler, autocast
+from torch.cuda.amp import GradScaler
+from torch.amp import autocast
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from tqdm import tqdm
 
@@ -26,6 +27,7 @@ def train_one_epoch(model, dataloader, criterion, optimizer, scaler, device):
     running_loss = 0.0
     correct_preds = 0
     total_samples = 0
+    use_amp = torch.device(device).type == "cuda"
 
     for rgb, freq, targets in tqdm(dataloader, desc="Training"):
         rgb = rgb.to(device, non_blocking=True)
@@ -35,7 +37,7 @@ def train_one_epoch(model, dataloader, criterion, optimizer, scaler, device):
         optimizer.zero_grad(set_to_none=True)
 
         # Mixed precision forward pass
-        with autocast():
+        with autocast(device_type=torch.device(device).type, enabled=use_amp):
             outputs = model(rgb, freq)
             loss = criterion(outputs, targets)
 
@@ -51,6 +53,9 @@ def train_one_epoch(model, dataloader, criterion, optimizer, scaler, device):
         correct_preds += (preds == targets).sum().item()
         total_samples += rgb.size(0)
 
+    if total_samples == 0:
+        raise ValueError("Cannot train on an empty data loader.")
+
     epoch_loss = running_loss / total_samples
     epoch_acc = correct_preds / total_samples
     return epoch_loss, epoch_acc
@@ -61,6 +66,7 @@ def validate(model, dataloader, criterion, device):
     running_loss = 0.0
     correct_preds = 0
     total_samples = 0
+    use_amp = torch.device(device).type == "cuda"
 
     with torch.no_grad():
         for rgb, freq, targets in tqdm(dataloader, desc="Validating"):
@@ -68,7 +74,7 @@ def validate(model, dataloader, criterion, device):
             freq = freq.to(device, non_blocking=True)
             targets = targets.float().unsqueeze(1).to(device, non_blocking=True)
 
-            with autocast():
+            with autocast(device_type=torch.device(device).type, enabled=use_amp):
                 outputs = model(rgb, freq)
                 loss = criterion(outputs, targets)
 
@@ -76,6 +82,9 @@ def validate(model, dataloader, criterion, device):
             preds = (torch.sigmoid(outputs) >= 0.5).float()
             correct_preds += (preds == targets).sum().item()
             total_samples += rgb.size(0)
+
+    if total_samples == 0:
+        raise ValueError("Cannot validate on an empty data loader.")
 
     val_loss = running_loss / total_samples
     val_acc = correct_preds / total_samples

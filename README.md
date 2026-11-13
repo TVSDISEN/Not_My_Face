@@ -133,16 +133,21 @@ It does not invent a real test label.
 ### 4. Train and infer
 
 ```powershell
-python -c "from src.training.run_training import run_kfold_training; run_kfold_training(manifest_csv='data/manifests/manifest_folds.csv', num_folds=5)"
+python -m src.training.run_training --manifest data/manifests/manifest_folds.csv --folds 5 --epochs 10 --batch-size 16 --device auto
 python -c "from src.training.inference_pipeline import run_ensemble_inference; run_ensemble_inference(test_manifest_csv='data/manifests/test_manifest.csv', checkpoint_dir='checkpoints', output_csv='outputs/submission.csv')"
 ```
 
-The training runner and inference pipeline can also be run with their defaults
-when the manifest files are in the current directory. Review their options
-before a long GPU run. Training applies the Albumentations pipeline to RGB
-images and recomputes their FFT from the augmented image so both streams stay
-aligned. Validation and inference use the cached frequency maps. Both inputs
-are resized to 256×256 and use the same ImageNet normalization.
+The runner validates the manifest and trains all five folds, writing the
+lowest-validation-loss model to `checkpoints/best_model_fold_<n>.pt` and
+per-epoch metrics to `checkpoints/training_history_fold_<n>.csv`. It logs
+training/validation loss, accuracy, and the learning rate. Inference accepts
+both `.pt` and legacy `.pth` checkpoints and ensembles all checkpoint files in
+the selected directory. Adjust `--epochs`, `--batch-size`, `--lr`, `--min-lr`,
+`--num-workers`, or `--checkpoint-dir` as needed; `--device cuda` requires a
+working CUDA-enabled PyTorch install. Training applies the Albumentations
+pipeline to RGB images and recomputes their FFT from the augmented image so
+both streams stay aligned. Validation and inference use cached frequency maps.
+Both inputs are resized to 256×256 and use the same ImageNet normalization.
 
 ## Tests
 
