@@ -35,6 +35,8 @@ def run_ensemble_inference(test_manifest_csv="test_manifest.csv", checkpoint_dir
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=True)
     
     results = []
+    filenames = test_df["filename"].tolist()
+    processed = 0
     with torch.no_grad():
         for rgb, freq, _ in tqdm(test_loader, desc="Ensemble Inference"):
             rgb = rgb.to(device, non_blocking=True)
@@ -49,10 +51,20 @@ def run_ensemble_inference(test_manifest_csv="test_manifest.csv", checkpoint_dir
                     
             batch_preds /= len(models)
             
-            for fname, prob in zip(test_df['filename'].values, batch_preds.cpu().numpy()):
+            batch_filenames = filenames[processed : processed + rgb.size(0)]
+            if len(batch_filenames) != rgb.size(0):
+                raise RuntimeError("Test manifest filenames do not match inference rows.")
+            for fname, prob in zip(batch_filenames, batch_preds.cpu().numpy()):
                 results.append({"filename": fname, "label": float(prob)})
+            processed += rgb.size(0)
+
+    if processed != len(filenames):
+        raise RuntimeError(
+            f"Inference produced {processed} predictions for {len(filenames)} test rows."
+        )
 
     df = pd.DataFrame(results)
+    os.makedirs(os.path.dirname(output_csv) or ".", exist_ok=True)
     df.to_csv(output_csv, index=False)
     print(f"✅ Final submission saved successfully to {output_csv}!")
 

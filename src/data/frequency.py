@@ -38,3 +38,14 @@ def compute_fft_spectrogram(image: np.ndarray) -> np.ndarray:
     if scale <= 0:
         return np.zeros(log_magnitude.shape, dtype=np.float32)
     return np.clip(log_magnitude / scale, 0.0, 1.0).astype(np.float32)
+
+
+def frequency_map_to_rgb(frequency_map: np.ndarray) -> np.ndarray:
+    """Quantize a normalized 2D frequency map into the model's 3-channel input."""
+    array = np.asarray(frequency_map, dtype=np.float32)
+    if array.ndim != 2 or array.size == 0:
+        raise ValueError("Expected a non-empty 2D frequency map.")
+    if not np.isfinite(array).all():
+        raise ValueError("Frequency map values must be finite.")
+    quantized = np.rint(np.clip(array, 0.0, 1.0) * 255).astype(np.uint8)
+    return np.repeat(quantized[..., np.newaxis], repeats=3, axis=2)

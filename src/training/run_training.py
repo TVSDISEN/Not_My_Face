@@ -11,12 +11,15 @@ import numpy as np
 import torchvision.transforms as T
 
 from ..models.dual_stream_net import DualStreamNet
+from ..data.augmentations import build_train_augmentation
+from ..data.frequency import compute_fft_spectrogram, frequency_map_to_rgb
 from .train import BCEWithLabelSmoothingLoss, train_one_epoch, validate
 
 class HackathonDataset(Dataset):
     """Dataset wrapper for Dual-Stream Spatial (RGB) and Frequency inputs."""
-    def __init__(self, manifest_df, transform=None):
+    def __init__(self, manifest_df, transform=None, augment=False):
         self.df = manifest_df
+        self.augmentation = build_train_augmentation() if augment else None
         self.transform = transform or T.Compose([
             T.Resize((256, 256)),
             T.ToTensor(),
@@ -30,14 +33,20 @@ class HackathonDataset(Dataset):
         row = self.df.iloc[idx]
         rgb_path = row['rgb_path']
         freq_path = row['freq_path']
-        label = float(row['label'])
+        label = float(row.get('label', 0.0))
 
-        # Load RGB image
         rgb_img = Image.open(rgb_path).convert('RGB')
-        rgb_tensor = self.transform(rgb_img)
+        if self.augmentation is not None:
+            rgb_array = np.asarray(rgb_img)
+            rgb_array = self.augmentation(image=rgb_array)["image"]
+            frequency_map = compute_fft_spectrogram(rgb_array)
+            frequency_rgb = frequency_map_to_rgb(frequency_map)
+            freq_img = Image.fromarray(frequency_rgb)
+            rgb_img = Image.fromarray(rgb_array)
+        else:
+            freq_img = Image.open(freq_path).convert('RGB')
 
-        # Load Frequency spectrum image
-        freq_img = Image.open(freq_path).convert('RGB')
+        rgb_tensor = self.transform(rgb_img)
         freq_tensor = self.transform(freq_img)
 
         return rgb_tensor, freq_tensor, torch.tensor(label, dtype=torch.float32)
@@ -61,7 +70,7 @@ def run_kfold_training(manifest_csv="manifest_folds.csv", num_folds=5, epochs=10
         train_df = full_df[full_df['fold'] != fold].reset_index(drop=True)
         val_df = full_df[full_df['fold'] == fold].reset_index(drop=True)
 
-        train_dataset = HackathonDataset(train_df)
+        train_dataset = HackathonDataset(train_df, augment=True)
         val_dataset = HackathonDataset(val_df)
 
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2, pin_memory=True)

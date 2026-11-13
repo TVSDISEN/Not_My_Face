@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from src.data.manifest import build_manifest
+from src.data.manifest import IMAGE_SUFFIXES, build_manifest
 
 
 def select_face_box(
@@ -84,6 +84,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--data", type=Path, required=True, help="Raw image directory.")
     parser.add_argument("--out", type=Path, required=True, help="Face crop directory.")
     parser.add_argument("--metadata", type=Path, help="Optional manifest or folds CSV.")
+    parser.add_argument(
+        "--unlabeled",
+        action="store_true",
+        help="Treat input as an unlabeled test image directory.",
+    )
     parser.add_argument("--path-column", default="path")
     parser.add_argument("--label-column", default="label")
     parser.add_argument("--group-column", default="group_id")
@@ -113,13 +118,27 @@ def main() -> None:
     if output_root == data_root or data_root in output_root.parents:
         raise ValueError("Output directory must not be inside the raw data directory.")
 
-    manifest = build_manifest(
-        data_root,
-        metadata_path=args.metadata,
-        path_column=args.path_column,
-        label_column=args.label_column,
-        group_column=args.group_column,
-    )
+    if args.unlabeled:
+        if args.metadata is not None:
+            raise ValueError("--metadata cannot be combined with --unlabeled.")
+        test_paths = sorted(
+            path
+            for path in data_root.rglob("*")
+            if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES
+        )
+        if not test_paths:
+            raise ValueError(f"No supported images found under {data_root}")
+        manifest = pd.DataFrame(
+            {"path": [path.relative_to(data_root).as_posix() for path in test_paths]}
+        )
+    else:
+        manifest = build_manifest(
+            data_root,
+            metadata_path=args.metadata,
+            path_column=args.path_column,
+            label_column=args.label_column,
+            group_column=args.group_column,
+        )
     detector = create_mtcnn(args.device)
     output_root.mkdir(parents=True, exist_ok=True)
 
@@ -164,15 +183,24 @@ def main() -> None:
         written_paths.add(destination_key)
 
         record = dict(row)
+        if args.unlabeled:
+            record["group_id"] = Path(source_relative).parent.as_posix()
+            record["filename"] = source_relative
         record["original_path"] = source_relative
         record["path"] = destination_relative.as_posix()
         extracted.append(record)
 
     columns = list(manifest.columns)
+    if args.unlabeled:
+        columns = [column for column in columns if column != "label"]
+        columns.extend(
+            column for column in ("group_id", "filename") if column not in columns
+        )
     if "original_path" not in columns:
         columns.append("original_path")
-    result_columns = ["path", "label", "group_id"] + [
-        column for column in columns if column not in {"path", "label", "group_id"}
+    base_columns = ["path", "group_id"] if args.unlabeled else ["path", "label", "group_id"]
+    result_columns = base_columns + [
+        column for column in columns if column not in base_columns
     ]
     pd.DataFrame(extracted, columns=result_columns).to_csv(
         output_root / "manifest.csv", index=False

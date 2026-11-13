@@ -1,54 +1,41 @@
-<<<<<<< HEAD
-.venv/
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.coverage
-data/raw/
-data/faces/
-data/folds.csv
-weights/
-outputs/
-=======
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
 .venv/
 venv/
 env/
+__pycache__/
+*.py[cod]
+*.egg-info/
 .pytest_cache/
+.coverage
 .ipynb_checkpoints/
 
-# Dataset (provided data must not be committed)
+# The provided dataset and generated preprocessing artifacts must not be committed.
+data/raw/
 data/faces/
-!data/faces/.gitkeep
+data/frequency/
+data/manifests/
+data/folds.csv
+data/train_folds.csv
 
-# Model weights and exports (share via Google Drive instead)
-weights/*
-!weights/.gitkeep
+# Model weights, exports, and experiment outputs.
+checkpoints/
+weights/
 *.pth
 *.pt
 *.ckpt
 *.onnx
 *.engine
 *.trt
-
-# Outputs (keep the final submission only)
-outputs/*
-!outputs/.gitkeep
-!outputs/submission.csv
-
-# Logs and experiment tracking
 logs/
 runs/
 wandb/
 lightning_logs/
 *.log
 
-# IDE and OS files
+# Keep only the final submission if one is generated.
+outputs/*
+!outputs/submission.csv
+
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
->>>>>>> da271ae0e4fab35db6ad6e30d0311de005418c7a

@@ -7,7 +7,7 @@ from torch.cuda.amp import GradScaler, autocast
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from tqdm import tqdm
 
-from models.dual_stream_net import DualStreamNet
+from ..models.dual_stream_net import DualStreamNet
 
 class BCEWithLabelSmoothingLoss(nn.Module):
     """Binary Cross Entropy with label smoothing to prevent overconfidence."""
