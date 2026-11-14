@@ -1,0 +1,55 @@
+{
+  "model": "DualStreamNet (EfficientNet-B2 + 2D-FFT Branch)",
+  "input_resolution": "3x256x256",
+  "total_parameters": 8680707,
+  "benchmarks": [
+    {
+      "batch_size": 1,
+      "pytorch": {
+        "runtime": "PyTorch (CPU)",
+        "batch_size": 1,
+        "parameters": 8680707,
+        "disk_size_mb": 33.58,
+        "mean_latency_ms_per_image": 77.28,
+        "p95_batch_latency_ms": 93.47,
+        "throughput_img_per_sec": 12.94,
+        "peak_python_ram_mb": 2.2
+      },
+      "onnx_runtime": {
+        "runtime": "ONNX Runtime (CPUExecutionProvider)",
+        "batch_size": 1,
+        "parameters": null,
+        "disk_size_mb": 33.11,
+        "mean_latency_ms_per_image": 10.23,
+        "p95_batch_latency_ms": 10.73,
+        "throughput_img_per_sec": 97.71,
+        "peak_python_ram_mb": 3.0
+      },
+      "onnx_speedup_x": 7.55
+    },
+    {
+      "batch_size": 8,
+      "pytorch": {
+        "runtime": "PyTorch (CPU)",
+        "batch_size": 8,
+        "parameters": 8680707,
+        "disk_size_mb": 33.58,
+        "mean_latency_ms_per_image": 32.92,
+        "p95_batch_latency_ms": 270.19,
+        "throughput_img_per_sec": 30.38,
+        "peak_python_ram_mb": 2.15
+      },
+      "onnx_runtime": {
+        "runtime": "ONNX Runtime (CPUExecutionProvider)",
+        "batch_size": 8,
+        "parameters": null,
+        "disk_size_mb": 33.11,
+        "mean_latency_ms_per_image": 12.31,
+        "p95_batch_latency_ms": 99.38,
+        "throughput_img_per_sec": 81.21,
+        "peak_python_ram_mb": 24.0
+      },
+      "onnx_speedup_x": 2.67
+    }
+  ]
+}
