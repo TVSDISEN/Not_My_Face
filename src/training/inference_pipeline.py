@@ -73,8 +73,8 @@ def run_ensemble_inference(test_manifest_csv="test_manifest.csv", checkpoint_dir
             batch_filenames = filenames[processed : processed + rgb.size(0)]
             if len(batch_filenames) != rgb.size(0):
                 raise RuntimeError("Test manifest filenames do not match inference rows.")
-            for fname, prob in zip(batch_filenames, batch_preds.cpu().numpy()):
-                results.append({"filename": fname, "label": float(prob)})
+            for image_id, prob in zip(batch_filenames, batch_preds.cpu().numpy()):
+                results.append({"image_id": image_id, "label": float(prob)})
             processed += rgb.size(0)
 
     if processed != len(filenames):

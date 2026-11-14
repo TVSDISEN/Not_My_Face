@@ -121,7 +121,8 @@ per crop. Outputs:
 - `data/manifests/test_manifest.csv` with `rgb_path,freq_path,filename`, as
   expected by the ensemble inference pipeline. Paths in both manifests are
   absolute for compatibility with `HackathonDataset`; `filename` retains the
-  test image's relative path and is consumed by inference for submission rows.
+  test image ID (or relative path for non-template datasets). Inference writes
+  this value as the `image_id` column in the submission CSV.
 - `data/frequency/` containing cached frequency PNG files. The FFT map is
   normalized to `[0,1]`, quantized to 8-bit, and replicated across RGB channels
   to match the model's three-channel input.

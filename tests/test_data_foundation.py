@@ -421,7 +421,7 @@ class ModelManifestIntegrationTests(unittest.TestCase):
             submission = pd.read_csv(output_path)
 
         self.assertEqual(
-            submission["filename"].tolist(),
+            submission["image_id"].tolist(),
             [f"video/frame_{index}.jpg" for index in range(3)],
         )
         self.assertTrue(np.allclose(submission["label"], 0.5))
