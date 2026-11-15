@@ -8,7 +8,7 @@ __pycache__/
 .coverage
 .ipynb_checkpoints/
 
-# The provided dataset and generated preprocessing artifacts must not be committed.
+# The provided dataset and generated preprocessing artifacts are not committed.
 *.zip
 data/raw/
 data/faces/

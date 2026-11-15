@@ -25,7 +25,7 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision import models, transforms
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CONFIG — Matches src/data/extract_faces.py & training setup
+# CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
 IMAGE_SIZE = 256
 BATCH_SIZE = 64
